@@ -1,0 +1,85 @@
+---
+title: "Peracarids PMRNP"
+author: "Verónica Monroy"
+date: "Friday, March 24, 2017"
+output: html_document
+---
+```{r}
+setwd("~/GitHub/Peracarids")
+Abu <- read.csv("~/GitHub/Peracarids/NoSppOrg.csv") 
+```
+
+### Load libraries
+```{r}
+library (ggplot2)
+library(plyr)
+library(lsr)
+library(gplots)
+library(viridis)
+```
+
+###Change variable type
+```{r}
+Abu$No = as.numeric(Abu$No)
+Abu$Spp = as.numeric(Abu$Spp)
+Abu$Nkg = as.numeric(Abu$Nkg)
+```
+
+###Indicate the order of the variables
+```{r}
+Abu$Code=factor(Abu$Code, levels = c("BS", "PS", "JS", "BM", "PM", "JM", "BP", "PP", "JP"))
+Abu$Depth=factor(Abu$Depth, levels = c("BR", "FR (6-8)", "FR (10-12)"))
+Abu$Site=factor(Abu$Site, levels = c("Bonanza", "Bocana", "Jardines"))
+```
+
+### Number of organisms per site+depth
+```{r}
+Abu3<-ddply(Abu, "Code", summarise, sum= sum(No))
+Abu3
+```
+
+###Mean (SD) abundance per depth
+```{r}
+with(Abu, tapply(Nkg, Depth, function(x) {
+    sprintf("M (SD), = %1.2f (%1.2f)", mean(x), sd(x))
+}))
+```
+
+### Barlett test
+```{r}
+require(graphics)
+plot(LogNkg ~ Site, data = Abu) # data transformed log10(N+1)
+bartlett.test(Abu$LogNkg, Abu$Site)
+
+plot(LogNkg ~ Depth, data = Abu)
+bartlett.test(Abu$LogNkg, Abu$Depth)
+```
+
+### 2-factor ANOVA
+```{r}
+npk.aov <- aov(LogNkg ~ Site*Depth, data=Abu) 
+summary(npk.aov)
+TukeyHSD(npk.aov, conf.level=.95);
+plot(TukeyHSD(npk.aov, conf.level=.95));
+```
+
+###Heatmap for dominant taxa (using relative abundance)
+```{r}
+HMdom <- read.csv("~/GitHub/Peracarids/HMdom.csv")
+```
+
+```{r}
+HMdom <- HMdom[order(HMdom$Total),]
+
+row.names(HMdom)<-HMdom$Taxa
+HMdom <- HMdom [,2:10]
+
+HMdom_matrix<-data.matrix(HMdom)
+```
+
+###Heatmap
+```{r}
+  # Usando colores viridis
+HMdom_matrix[HMdom_matrix==0] = NA # For cells with cero to be shown in white
+heatmap.2(HMdom_matrix, col = viridis::viridis(100), na.color="White", trace ="none", cexRow=1, margins = c(12, 12))   #viridis colors
+```
