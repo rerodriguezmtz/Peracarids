@@ -1,0 +1,115 @@
+---
+title: "Peracarids PMRNP"
+author: "Verónica Monroy"
+date: "Friday, March 24, 2017"
+output: pdf_document
+---
+```{r}
+setwd("~/GitHub/Peracarids")
+Abu <- read.csv("~/GitHub/Peracarids/NoSppOrg.csv") 
+```
+
+### Load libraries
+```{r}
+library(plyr)
+```
+
+###Change variable type
+```{r}
+Abu$N = as.numeric(Abu$N)
+Abu$Taxa = as.numeric(Abu$Taxa)
+Abu$Nkg = as.numeric(Abu$Nkg)
+```
+
+###Indicate the order of the variables
+```{r}
+Abu$Code=factor(Abu$Code, levels = c("BzS", "BoS", "JaS", "BzM", "BoM", "JaM", "BzD", "BoD", "JaD"))
+Abu$Depth=factor(Abu$Depth, levels = c("BR", "FR (6-8)", "FR (10-12)"))
+Abu$Site=factor(Abu$Site, levels = c("Bonanza", "Bocana", "Jardines"))
+```
+
+### Number of organisms per site+depth
+```{r}
+Abu3<-ddply(Abu, "Code", summarise, sum= sum(N))
+Abu3
+```
+
+###Mean (SE) abundance per depth and site
+```{r}
+with(Abu, tapply(Nkg, Site, function(x) {
+    sprintf("M (SE), = %1.2f (%1.2f)", mean(x), se = sd(x)/sqrt(length(x)))
+}))
+
+with(Abu, tapply(Nkg, Depth, function(x) {
+    sprintf("M (SE), = %1.2f (%1.2f)", mean(x), se = sd(x)/sqrt(length(x)))
+}))
+```
+
+### Barlett test
+```{r}
+require(graphics)
+plot(LogNkg ~ Site, data = Abu) # data transformed log10(N+1)
+bartlett.test(Abu$LogNkg, Abu$Site)
+
+plot(LogNkg ~ Depth, data = Abu)
+bartlett.test(Abu$LogNkg, Abu$Depth)
+```
+
+### Figure abundance
+```{r}
+library (ggplot2)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+    library(plyr)
+    length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+    
+    datac <- ddply(data, groupvars, .drop=.drop,
+                   .fun = function(xx, col) {
+                       c(N    = length2(xx[[col]], na.rm=na.rm),
+                         mean = mean   (xx[[col]], na.rm=na.rm),
+                         sd   = sd     (xx[[col]], na.rm=na.rm)
+                       )
+                   },
+                   measurevar
+    )
+    
+    # Rename the "mean" column    
+    datac <- rename(datac, c("mean" = measurevar))
+    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+    datac$ci <- datac$se * ciMult
+    
+    return(datac)
+}
+```
+
+#Plot
+```{r}
+Abuc <- summarySE(Abu, measurevar="Nkg", groupvars=c("Code"))
+Abuc
+
+ggplot(Abuc, aes(x=Code, y=Nkg)) + 
+    geom_bar(position=position_dodge(), stat="identity", fill="azure4", colour="Black") +
+    geom_errorbar(aes(ymin=Nkg-se, ymax=Nkg+se),
+                  width=.2,                    # Width of the error bars
+                  position=position_dodge(.9))+
+    xlab("Site and Depth")+
+    ylab("Individuals kg-1")+ 
+    theme(text = element_text(size=20, hjust=0.5, vjust=0.5))+
+    theme(panel.grid.minor=element_blank())+
+    theme(axis.title.x = element_text(size = 22, hjust = 0.5), 
+          axis.title.y = element_text(size = 22, vjust = 0.5))
+```
+
+### 2-factor ANOVA
+```{r}
+npk.aov <- aov(LogNkg ~ Site*Depth, data=Abu) # Compare abundance
+summary(npk.aov)
+TukeyHSD(npk.aov, conf.level=.95);
+
+npk.aov <- aov(Taxa ~ Site*Depth, data=Abu) # Compare # Taxa
+summary(npk.aov)
+```
